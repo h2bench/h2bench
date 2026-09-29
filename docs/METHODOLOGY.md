@@ -1,66 +1,130 @@
-# Методика h2h-present-interval/1.0
+# Methodology h2h-present-interval/1.0
 
-Источник: PresentMon 2.3.1, `--v1_metrics --qpc_time`, колонка `msBetweenPresents` (регистронезависимый разбор). Это интервалы между вызовами Present приложения, не обязательно интервалы физического вывода на экран. Dropped presents не отбрасываются. Frame Generation нельзя публиковать в данном профиле: generated/displayed FPS требует отдельной методики.
+Source: PresentMon 2.3.1, `--v1_metrics --qpc_time`, column `msBetweenPresents` (parsed
+case-insensitively). These are the intervals between the application's Present calls, which are
+not necessarily the intervals between physical screen presentations. Dropped presents are not
+discarded. Frame Generation cannot be published under this profile: generated and displayed frame
+rates require a separate methodology.
 
-Сохраняются положительные конечные интервалы. Первая нулевая запись не участвует. Нулевые/отрицательные/NaN/Infinity не заменяются выдуманными значениями. PID фильтруется и PresentMon, и парсером. Весь набор допустимых кадров хранится с адресом swap chain. Для итоговых метрик выбирается цепочка с наибольшим числом кадров (при равенстве — наименьший адрес). Данные разных swap chains никогда не суммируются. Несколько цепочек ставят FRAME_CAPTURE_UNSTABLE; смена цепочки посреди теста может уменьшить покрытие, такой тест следует повторить.
+Positive finite intervals are kept. The first zero entry does not participate. Zero, negative, NaN
+and Infinity values are not replaced with invented ones. The PID is filtered by both PresentMon and
+the parser. The complete set of valid frames is stored along with its swap chain address. For the
+final metrics the chain with the most frames is chosen, and on a tie the lowest address. Data from
+different swap chains is never summed together. Several chains raise FRAME_CAPTURE_UNSTABLE; a
+chain change in the middle of a run can reduce coverage, and such a run should be repeated.
 
-Время кадра: `(QPCTime − sessionStartQpc) / Stopwatch.Frequency`. Телеметрия использует Stopwatch, запущенный в той же точке перед созданием capture-процесса. Возможная разница старта часов — накладные расходы нескольких вызовов, не время асинхронной доставки ETW. Сэмпл телеметрии помечается временем начала опроса. Интервалы после конца настроенного окна не принимаются. Перед окончательным расчётом PresentMon останавливается и его выход дочитывается.
+Frame time: `(QPCTime − sessionStartQpc) / Stopwatch.Frequency`. Telemetry uses a Stopwatch
+started at the same point, before the capture process is created. Any difference in clock start is
+the overhead of a few calls, not the asynchronous delivery time of ETW. A telemetry sample is
+stamped with the time its poll began. Intervals after the end of the configured window are not
+accepted. Before the final calculation PresentMon is stopped and its output is drained.
 
-Для N интервалов в миллисекундах:
+For N intervals in milliseconds:
 
-- Duration = sum(frameTime) / 1000 — покрытая кадрами длительность, может быть чуть меньше выбранного окна.
+- Duration = sum(frameTime) / 1000 — the frame-covered duration, which may be slightly shorter
+  than the selected window.
 - Average FPS = N × 1000 / sum(frameTime).
 - Median FPS = 1000 / median(frameTime).
 - Minimum FPS = 1000 / max(frameTime); Maximum FPS = 1000 / min(frameTime).
-- 1% low = 1000 / mean(самые медленные ceil(N × 0.01) интервалы).
-- 0.1% low = 1000 / mean(самые медленные ceil(N × 0.001) интервалы).
-- Percentile P: сортировка по возрастанию, индекс `(N − 1) × P`, линейная интерполяция между соседями.
+- 1% low = 1000 / mean(the slowest ceil(N × 0.01) intervals).
+- 0.1% low = 1000 / mean(the slowest ceil(N × 0.001) intervals).
+- Percentile P: sort ascending, index `(N − 1) × P`, linear interpolation between neighbours.
 
-Значения не округляются в сохранённых данных. UI округляет только отображение. Live-панель использует последние 2000 событий (не весь тест); окончательные метрики пересчитываются по полному набору. График истории прореживается для отрисовки, RAW не прореживается.
+Values are not rounded in the stored data. The UI rounds only what it displays. The live panel
+uses the most recent 2000 events, not the whole run; the final metrics are recomputed from the
+complete set. The history graph is decimated for drawing, RAW is not.
 
 ## RAW format v1
 
-Little-endian, заголовок 8 bytes: ASCII `H2HF`, int32 version=1. Далее записи по 24 bytes: float64 timestampSeconds, float64 frameTimeMs, uint64 swapChainAddress. Максимум 2 млн событий (48 MB плюс managed-память), окно до 600 секунд. При достижении лимита сохраняется частичный тест с ошибкой. Компактный binary выбран без gzip для восстановления после аварийного завершения; неполная последняя запись игнорируется при восстановлении.
+Little-endian, 8-byte header: ASCII `H2HF`, int32 version=1. Then 24-byte records: float64
+timestampSeconds, float64 frameTimeMs, uint64 swapChainAddress. Up to 2 million events (48 MB plus
+managed memory), window up to 600 seconds. On reaching the limit a partial run is saved with an
+error. Compact binary without gzip is used so that recovery works after a crash; an incomplete
+trailing record is ignored during recovery.
 
-Каждые 250 ms writer flush, телеметрия checkpoint каждые 5 секунд. Atomic replace result.json/telemetry.json предотвращает чтение наполовину записанного JSON. Это защита от обычных сбоев процесса, не гарантия сохранности при потере питания или отказе диска.
+The writer flushes every 250 ms, and telemetry is checkpointed every 5 seconds. Atomic replacement
+of result.json/telemetry.json prevents reading half-written JSON. This protects against ordinary
+process failures; it is not a guarantee of durability against power loss or disk failure.
 
 ## Quality flags
 
-- SHORT_TEST: покрытая кадрами длительность меньше 30 секунд.
-- BENCHMARK_INTERRUPTED: отмена, закрытие игры, исключение или восстановление после сбоя.
-- FRAME_CAPTURE_UNSTABLE: нет кадров, несколько swap chains или диапазон timestamp выбранной цепочки меньше 85% заданного окна.
-- GPU_NOT_FULLY_LOADED: средняя доступная NVIDIA GPU usage меньше 80%.
-- FRAME_GENERATION_ENABLED: пользователь указал генерацию кадров; upload блокируется, локальное измерение разрешено.
+- SHORT_TEST: frame-covered duration below 30 seconds.
+- BENCHMARK_INTERRUPTED: cancelled, the game closed, an exception, or recovery after a failure.
+- FRAME_CAPTURE_UNSTABLE: no frames, several swap chains, or the timestamp range of the selected
+  chain covers less than 85% of the requested window.
+- GPU_NOT_FULLY_LOADED: mean available NVIDIA GPU usage below 80%.
+- FRAME_GENERATION_ENABLED: the user indicated frame generation; upload is blocked, local
+  measurement is allowed.
 
-Значения CPU/GPU workload synthetic profile не вычисляются из игрового FPS. Локальный FPS не переводится в H2H Score. Формулы новой методики необходимо согласовать с владельцем серверных рейтингов перед широким сравнением с прежним агентом.
+CPU/GPU workload values of the synthetic profile are not derived from game FPS. Local FPS is not
+converted into an H2H Score. The formulas of the new methodology have to be agreed with the owner
+of the server ratings before any broad comparison with the previous agent.
 
-## Дополнительные quality flags
+## Additional quality flags
 
-HIGH_BACKGROUND_CPU: хотя бы один доступный sample фоновой CPU-нагрузки >20% (system CPU минус process CPU, нормировано на logical processors). THERMAL_THROTTLING: явно доступный датчик вернул true; неизвестное значение не означает отсутствия throttling. VIDEO_CAPTURE_FAILED: запись/проверка MP4 не удалась. SYNTHETIC_COMPONENT_FAILED: ошибка компонента, остальные измерения сохранены.
+HIGH_BACKGROUND_CPU: at least one available background CPU sample above 20% (system CPU minus
+process CPU, normalised by logical processors). THERMAL_THROTTLING: an explicitly available sensor
+returned true; an unknown value does not mean throttling is absent. VIDEO_CAPTURE_FAILED: the MP4
+write or verification failed. SYNTHETIC_COMPONENT_FAILED: one component failed, the remaining
+measurements were kept.
 
-## Системная методика h2h-synthetic/2.0.0
+## System methodology h2h-synthetic/2.0.0
 
-Quick: 1 проход, 1.5сек на подизмерение. Full: 3 прохода, 3сек. Инициализация/shader compilation исключены из временного окна. Итог — среднее доступных значений; проходы сохраняются отдельно. Variance — максимальный population coefficient of variation метрик, %. Один проход не даёт variance; ошибки не превращаются в нули.
+Quick: 1 pass, 1.5 s per sub-measurement. Full: 3 passes, 3 s. Initialisation and shader
+compilation are excluded from the timing window. The result is the mean of the available values;
+the passes are stored separately. Variance is the maximum population coefficient of variation
+across the metrics, in %. A single pass yields no variance, and errors are not turned into zeros.
 
-- CPU: 1 либо Environment.ProcessorCount выделенных потоков с барьером начала. Одна операция =32итерации uint xorshift(13,17,5) и multiply0x9e3779b9. Ops/s. Преимущественно integer workload.
-- RAM bandwidth: Buffer.BlockCopy64MiB, bytes/seconds/1e6. Cache/runtime влияют на результат.
-- RAM latency: random dependent pointer chase4M int32 (16MiB), seed42, ns/access. Working set может помещаться в LLC; это не чистая DRAM latency.
-- SSD: собственный64MiB scratchfile, unbuffered+write-through, aligned buffers, DeleteOnClose. Sequential read1MiB MB/s; random4KiB QD1 read/write IOPS. Малый working set, не sustained SSD workload. Пользовательские файлы и raw device не затрагиваются.
-- GPU graphics: D3D12 selected DXGI adapter, offscreen1920×1080 RGBA8 fullscreen triangle, fixed64-iteration pixel shader, batch4draws, fence before completion. Draws/s (fps-equivalent), не игровой FPS.
-- GPU compute: 65536threads,128dependent float multiply/add iterations,4dispatch batch с UAV barriers, SM5.1 precise,2operations/iteration. GOPS workload, не peak vendor TFLOPS. Readback проверяет конечный результат.
+- CPU: either 1 or `Environment.ProcessorCount` dedicated threads with a start barrier. One
+  operation is 32 iterations of uint xorshift(13,17,5) and multiply 0x9e3779b9. Ops/s. Predominantly
+  integer workload.
+- RAM bandwidth: Buffer.BlockCopy 64 MiB, bytes/seconds/1e6. Cache and runtime affect the result.
+- RAM latency: random dependent pointer chase over 4M int32 (16 MiB), seed 42, ns/access. The
+  working set may fit in LLC, so this is not pure DRAM latency.
+- SSD: dedicated 64 MiB scratch file, unbuffered + write-through, aligned buffers, DeleteOnClose.
+  Sequential read 1 MiB in MB/s; random 4 KiB QD1 read/write in IOPS. Small working set, not a
+  sustained SSD workload. User files and the raw device are not touched.
+- GPU graphics: D3D12 on the selected DXGI adapter, offscreen 1920×1080 RGBA8 fullscreen triangle,
+  fixed 64-iteration pixel shader, batch of 4 draws, fence before completion. Draws/s
+  (fps-equivalent), not game FPS.
+- GPU compute: 65536 threads, 128 dependent float multiply/add iterations, batch of 4 dispatches
+  with UAV barriers, SM5.1 precise, 2 operations/iteration. A GOPS workload, not vendor peak
+  TFLOPS. Readback verifies the final result.
 
-## Видео
+## Video
 
-WGC HWND, максимум1920×1080 с сохранением пропорций, H26430fps target8Mbps/max10Mbps, no audio, GOP60. Encoder выбирается пробным encode NVENC/AMF/QSV/MF software. Fragmented MP4 сохраняет завершённые фрагменты при сбое. FPS берётся только из PresentMon. FFmpeg drop/duplicate counters относятся к encoder pipeline, не к dropped game presents.
+WGC HWND capture, up to 1920×1080 with aspect preserved, H264 30 fps, target 8 Mbps / max 10 Mbps,
+no audio, GOP 60. The encoder is chosen by a trial encode of NVENC/AMF/QSV/MF software.
+Fragmented MP4 keeps completed fragments on failure. FPS comes only from PresentMon. FFmpeg
+drop/duplicate counters describe the encoder pipeline, not dropped game presents.
 
-Overlay компонуется drawtext, обновляется до4раз/сек, содержит названия CPU/GPU, установленный объём ОЗУ, UTC, appversion, settings и ID теста. С версии 2.0.3 строка Code выводится только при наличии серверного nonce; заглушка Code local удалена в экранном и видеооверлее. Без сервера — LOCAL/NOT SERVER VERIFIED. С версии 2.0.1 запись начинается после countdown, elapsed в overlay начинается в FPS-окне. Начало MP4 и RAW различаются. Полный SHA256 MP4/RAW фиксируется после закрытия writers. Metadata клиента не является криптографической аттестацией игры.
+The overlay is composited with drawtext, refreshes up to 4 times per second, and contains the CPU
+and GPU names, the installed amount of RAM, UTC, app version, settings and the run ID. From version
+2.0.3 the Code line is shown only when a server nonce is present; the Code local placeholder was
+removed from both the screen and video overlays. Without a server it reads LOCAL / NOT SERVER
+VERIFIED. From version 2.0.1 recording starts after the countdown, and the elapsed time in the
+overlay begins at the FPS window. The start of the MP4 and of the RAW differs. The full SHA-256 of
+the MP4 and RAW is recorded after the writers are closed. Client metadata is not a cryptographic
+attestation of the game.
 
+## 2.1.0 changes: frame data and the passport
 
+The per-frame file frames.dat is transferred whole through the resumable frames API when the
+capability benchmarkFrames=h2h-frames/1 is available. The original file containing all swap chains
+is sent; primarySwapChain and primaryFrameCount designate the chain used for the final metrics. The
+server is obliged to verify the hash, the binary format and the chain selection itself. The graph
+is built from the real records, not from summary FPS; decimation is only acceptable for display.
 
-## Изменения 2.1.0: данные кадров и паспорт
+The game's GPU is checked from the RunningTime increments of the Windows GPU Engine type 3D
+counters for its PID, bound to the DXGI LUID of the selected adapter. Several active adapters mean
+ambiguous, and the absence of available data means unknown. This check is a heuristic, not
+cryptographic proof. A mismatch blocks submission; an unknown adapter is marked
+GPU_ADAPTER_UNVERIFIED. User-entered API and V-Sync values have the source user_game_settings. The
+DXGI runtime does not distinguish DX11 from DX12, and SyncInterval does not prove the actual V-Sync
+mode. The game version is the FileVersion of the executable, not a guaranteed Steam build ID.
 
-Покадровый файл frames.dat передаётся целиком через возобновляемый API frames при наличии capability benchmarkFrames=h2h-frames/1. Отправляется исходный файл всех swap chains; primarySwapChain и primaryFrameCount задают цепочку итоговых метрик. Сервер обязан самостоятельно проверить хеш, бинарный формат и выбор цепочки. График строится из реальных записей, не из сводных FPS; прореживание допустимо только для отображения.
-
-GPU игры проверяется по приращениям RunningTime движков Windows GPU Engine типа 3D для её PID, с привязкой к DXGI LUID выбранного адаптера. Несколько активных адаптеров означают ambiguous, отсутствие доступных данных — unknown. Проверка выборочная, а не криптографическое доказательство. Mismatch блокирует отправку; неизвестный адаптер отмечается GPU_ADAPTER_UNVERIFIED. API/V-Sync, введённые пользователем, имеют источник user_game_settings. Runtime DXGI не различает DX11/DX12; SyncInterval не доказывает фактический режим V-Sync. Версия игры — FileVersion исполняемого файла, не гарантированный Steam build ID.
-
-Экранный и видеооверлей используют общую компоновку OverlayDesign: тёмная панель, бирюзовый FPS, отдельные колонки метрик, названия CPU/GPU, RAM/VRAM, настройки, ID, UTC, длительность, версия агента и настоящий nonce при наличии. Видео обновляет отдельные поля через открытые файлы постоянного размера с совместным чтением; они не переименовываются и не обрезаются при чтении FFmpeg. Передача/подтверждение файлов не означает принятия результата модерацией.
+The screen and video overlays share the OverlayDesign layout: dark panel, teal FPS, separate metric
+columns, CPU/GPU names, RAM/VRAM, settings, ID, UTC, duration, agent version, and the real nonce
+when present. The video updates individual fields through open fixed-size files with shared
+reading; they are not renamed or truncated while FFmpeg reads them. Transferring or acknowledging
+the files does not mean the result was accepted by moderation.
