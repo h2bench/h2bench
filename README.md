@@ -58,9 +58,6 @@ and package temperature; without it those two readings show as `—` and everyth
 - The video is captured independently of the frame data. The frame numbers are not derived from
   the video.
 
-Russian versions of both documents are kept alongside them, unaltered, in
-[docs/ru](docs/ru).
-
 [docs/VALIDATION.md](docs/VALIDATION.md) records hardware and game coverage, and what has and has
 not been re-verified after recent changes. It is deliberately candid about the gaps.
 
