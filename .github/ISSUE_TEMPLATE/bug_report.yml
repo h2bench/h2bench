@@ -1,0 +1,100 @@
+name: Bug report
+description: Something in the agent does not work as documented
+title: ''
+labels: ['bug']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The agent version, Windows build, GPU and driver decide whether a report can be
+        reproduced. They are the first thing asked for because they are what is missing most often.
+
+  - type: input
+    id: version
+    attributes:
+      label: Agent version
+      description: Shown in Settings, bottom of the sidebar
+      placeholder: '2.2.11'
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where it happens
+      options:
+        - Dashboard
+        - Benchmark setup
+        - Live overlay / FPS Monitor
+        - Results
+        - Settings
+        - Games
+        - Update
+        - Sign-in
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Windows version
+      options:
+        - Windows 11
+        - Windows 10, version 2004 or later
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: gpu
+    attributes:
+      label: GPU and driver version
+      description: As shown in the header, or in Settings
+      placeholder: 'RTX 3050 Laptop, driver 617.14'
+    validations:
+      required: true
+
+  - type: input
+    id: game
+    attributes:
+      label: Game and settings, if a benchmark was involved
+      description: Game, resolution, preset, ray tracing and frame generation state
+      placeholder: 'Black Desert, 1920x1080, High, RT off, FG off'
+    validations:
+      required: false
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what you saw instead
+    validations:
+      required: true
+
+  - type: textarea
+    id: admin
+    attributes:
+      label: Was the agent running as administrator?
+      description: The CPU clock and package temperature readings need it
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: video
+    attributes:
+      label: Video
+      options:
+        - label: This involves a recorded video that was wrong, missing, or would not play
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Anything else
+      description: >
+        Do not attach a recorded video here. Do not paste API tokens, passwords or any other
+        credential; if you do, it must be rotated and we will delete it.
+    validations:
+      required: false

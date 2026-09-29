@@ -1,0 +1,40 @@
+name: Feature request
+description: Something the agent should be able to do
+title: ''
+labels: ['enhancement']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This repository holds releases and documentation, not source code, so a change to the
+        agent itself is not contributed here. Describe the behaviour you want and why; it is
+        tracked from the description.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do
+      description: The situation, not the proposed solution. This is the part that decides whether a change is worth making.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would expect instead
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where it applies
+      options:
+        - Benchmark setup
+        - Live overlay / FPS Monitor
+        - Results
+        - Settings
+        - Overlay appearance
+        - Something else
+    validations:
+      required: true

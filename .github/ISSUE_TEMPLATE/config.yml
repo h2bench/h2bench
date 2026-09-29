@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question or discussion
+    url: https://github.com/h2bench/h2bench/discussions
+    about: Usage questions and ideas that are not defects. Open a discussion rather than an issue.
+  - name: Download and releases
+    url: https://github.com/h2bench/h2bench/releases
+    about: Older versions, checksums, and release notes.
+  - name: Website and leaderboard
+    url: https://h2bench.com
+    about: Accounts, published results, and anything on the site itself.

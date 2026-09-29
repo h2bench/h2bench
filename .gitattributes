@@ -1,0 +1,7 @@
+# Normalise to LF in the repository. The files are authored on Windows, where the checkout
+# would otherwise rewrite them to CRLF and make every diff show the whole file changed.
+* text=auto eol=lf
+
+*.exe binary
+*.zip binary
+*.sha256 text eol=lf
